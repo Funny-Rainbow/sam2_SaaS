@@ -1,0 +1,6 @@
+-r BiRefNet/requirements.txt
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+requests>=2.31.0
+modelscope>=1.19.0
+gradio>=5.0.0

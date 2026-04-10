@@ -1,5 +1,6 @@
 import os
 import gc
+from pathlib import Path
 from typing import List, Optional, Dict
 import numpy as np
 import torch
@@ -12,11 +13,18 @@ from pydantic import BaseModel, Field
 from sam2.build_sam import build_sam2, build_sam2_video_predictor
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from modelscope import AutoModelForImageSegmentation
+from safetensors.torch import load_file as load_safetensors_file
 
 # ==================== 配置 ====================
 SAM2_CHECKPOINT = os.environ.get("SAM2_CHECKPOINT", "checkpoints/sam2.1_hiera_large.pt")
 MODEL_CFG = os.environ.get("SAM2_MODEL_CFG", "configs/sam2.1/sam2.1_hiera_l.yaml")
-BIREFNET_MODEL_DIR = os.environ.get("BIREFNET_MODEL_DIR", "./BiRefNet")
+_LOCAL_BIREFNET_DIR = Path("./BiRefNet")
+_DEFAULT_BIREFNET_MODEL_DIR = (
+    "./BiRefNet"
+    if (_LOCAL_BIREFNET_DIR / "model.safetensors").exists()
+    else "ZhengPeng7/BiRefNet"
+)
+BIREFNET_MODEL_DIR = os.environ.get("BIREFNET_MODEL_DIR", _DEFAULT_BIREFNET_MODEL_DIR)
 
 # 设备配置
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -26,6 +34,24 @@ if device.type == "cuda":
     if torch.cuda.get_device_properties(0).major >= 8:
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
+
+
+def _load_local_birefnet(model_dir: str):
+    from BiRefNet.birefnet import BiRefNet
+
+    model = BiRefNet(bb_pretrained=False)
+    model.load_state_dict(load_safetensors_file(str(Path(model_dir) / "model.safetensors")))
+    return model.to(device).eval()
+
+
+def load_birefnet_model():
+    local_model_path = Path(BIREFNET_MODEL_DIR) / "model.safetensors"
+    if local_model_path.exists():
+        return _load_local_birefnet(BIREFNET_MODEL_DIR)
+
+    return AutoModelForImageSegmentation.from_pretrained(
+        BIREFNET_MODEL_DIR, trust_remote_code=True
+    ).to(device).eval()
 
 
 # ==================== 数据模型 ====================
@@ -218,9 +244,7 @@ async def segment_video(request: SegmentRequest):
                 # 动态加载 BiRefNet
                 if birefnet is None:
                     print("正在加载 BiRefNet...")
-                    birefnet = AutoModelForImageSegmentation.from_pretrained(
-                        BIREFNET_MODEL_DIR, trust_remote_code=True
-                    ).to(device).eval()
+                    birefnet = load_birefnet_model()
                     torch.set_float32_matmul_precision('high')
 
                 actual_frame_name = frame_names[annotation.frame_idx]

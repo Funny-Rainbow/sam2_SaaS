@@ -16,15 +16,29 @@ from modelscope import AutoModelForImageSegmentation
 from safetensors.torch import load_file as load_safetensors_file
 
 # ==================== 配置 ====================
-SAM2_CHECKPOINT = os.environ.get("SAM2_CHECKPOINT", "checkpoints/sam2.1_hiera_large.pt")
+ROOT = Path(__file__).resolve().parent
+
+
+def _resolve_repo_path(path_value: str) -> str:
+    path = Path(path_value)
+    if path.is_absolute():
+        return str(path)
+    return str(ROOT / path)
+
+
+SAM2_CHECKPOINT = _resolve_repo_path(
+    os.environ.get("SAM2_CHECKPOINT", "checkpoints/sam2.1_hiera_large.pt")
+)
 MODEL_CFG = os.environ.get("SAM2_MODEL_CFG", "configs/sam2.1/sam2.1_hiera_l.yaml")
-_LOCAL_BIREFNET_DIR = Path("./BiRefNet")
+_LOCAL_BIREFNET_DIR = ROOT / "BiRefNet"
 _DEFAULT_BIREFNET_MODEL_DIR = (
-    "./BiRefNet"
+    str(_LOCAL_BIREFNET_DIR)
     if (_LOCAL_BIREFNET_DIR / "model.safetensors").exists()
     else "ZhengPeng7/BiRefNet"
 )
 BIREFNET_MODEL_DIR = os.environ.get("BIREFNET_MODEL_DIR", _DEFAULT_BIREFNET_MODEL_DIR)
+if BIREFNET_MODEL_DIR != "ZhengPeng7/BiRefNet":
+    BIREFNET_MODEL_DIR = _resolve_repo_path(BIREFNET_MODEL_DIR)
 
 # 设备配置
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

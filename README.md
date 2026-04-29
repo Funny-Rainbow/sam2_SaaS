@@ -74,6 +74,17 @@ or individually from:
 
 Then SAM 2 can be used in a few lines as follows for image and video prediction.
 
+### SaaS runtime notes
+
+This fork is also used as a local dependency by `3dgs_Saas`.
+
+- `checkpoints/download_ckpts.sh` is safe to rerun; it skips files that already exist and writes via `*.part` before moving into place.
+- `sam2_segment_api.py` now resolves `SAM2_CHECKPOINT` relative to the repository root when the env value is not absolute.
+- `BIREFNET_MODEL_DIR` also accepts a repository-relative path. If `BiRefNet/model.safetensors` already exists locally, that local directory is preferred over the remote Hugging Face identifier.
+- For the `3dgs_Saas` worker deployment, the canonical local layout is:
+  - `SAM2_CHECKPOINT=checkpoints/sam2.1_hiera_large.pt`
+  - `BIREFNET_MODEL_DIR=BiRefNet`
+
 ### Image prediction
 
 SAM 2 has all the capabilities of [SAM](https://github.com/facebookresearch/segment-anything) on static images, and we provide image prediction APIs that closely resemble SAM for image use cases. The `SAM2ImagePredictor` class has an easy interface for image prompting.

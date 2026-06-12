@@ -409,6 +409,16 @@ def save_segmentation_results(
                     mask = np.zeros((original_frame.shape[0], original_frame.shape[1]), dtype=bool)
                 else:
                     mask = np.zeros(original_frame.shape, dtype=bool)
+            mask = np.asarray(mask).astype(bool)
+            frame_height, frame_width = original_frame.shape[:2]
+            if mask.shape != (frame_height, frame_width):
+                mask_image = (mask.astype(np.uint8) * 255)
+                mask = np.array(
+                    Image.fromarray(mask_image, mode="L").resize(
+                        (frame_width, frame_height),
+                        getattr(Image, "Resampling", Image).NEAREST,
+                    )
+                ) >= 128
             
             # 保存掩码图
             mask_image = (mask * 255).astype(np.uint8)

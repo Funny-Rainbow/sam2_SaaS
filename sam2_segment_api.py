@@ -90,6 +90,7 @@ class ObjectAnnotation(BaseModel):
     frame_idx: int = Field(..., description="标注所在的帧索引")
     points: Optional[List[Point]] = Field(None, description="标注点列表")
     box: Optional[BoundingBox] = Field(None, description="边界框")
+    mask_path: Optional[str] = Field(None, description="外部首帧mask路径，支持L/RGBA PNG")
     auto_mask: int = Field(0, description="是否自动获取帧的前景mask并作为sam输入，1为是，0为否")
 
 
@@ -204,6 +205,21 @@ def cleanup_gpu_memory():
         torch.cuda.reset_peak_memory_stats()
 
 
+def load_external_binary_mask(mask_path: str, expected_size: tuple[int, int]) -> np.ndarray:
+    """Load an external first-frame mask for SAM2 propagation."""
+    path = Path(mask_path)
+    assert path.exists(), f"外部mask不存在: {mask_path}"
+    with Image.open(path) as image:
+        image = image.convert("RGBA") if image.mode == "RGBA" else image.convert("L")
+        if image.mode == "RGBA":
+            mask = image.getchannel("A")
+        else:
+            mask = image
+        if mask.size != expected_size:
+            mask = mask.resize(expected_size, Image.NEAREST)
+        return (np.array(mask) >= 128).astype(np.uint8)
+
+
 # ==================== API 端点 ====================
 
 @app.get("/")
@@ -254,7 +270,18 @@ async def segment_video(request: SegmentRequest):
             obj_id = idx + 1
             obj_id_map[annotation.object_name] = obj_id
 
-            if annotation.auto_mask:
+            if annotation.mask_path:
+                actual_frame_name = frame_names[annotation.frame_idx]
+                with Image.open(os.path.join(request.frame_folder, actual_frame_name)) as frame_image:
+                    expected_size = frame_image.size
+                binary_mask = load_external_binary_mask(annotation.mask_path, expected_size)
+                video_predictor.add_new_mask(
+                    inference_state=inference_state,
+                    frame_idx=annotation.frame_idx,
+                    obj_id=obj_id,
+                    mask=binary_mask
+                )
+            elif annotation.auto_mask:
                 # 动态加载 BiRefNet
                 if birefnet is None:
                     print("正在加载 BiRefNet...")
